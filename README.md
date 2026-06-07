@@ -2,6 +2,28 @@
 
 A local-first Amazon Athena query manager for developers. Runs on your machine using `~/.aws/credentials`, reads settings from `config/athql.env`, and stores saved queries and history in `~/.athql/metadata.db`.
 
+## Screenshots
+
+### Workspace & catalog
+
+Multi-tab SQL editor, Glue catalog explorer, database picker, and run/save/format toolbar.
+
+![AthQL workspace with catalog explorer and SQL editor](docs/screenshots/02-athql-landing.png)
+
+### Light theme
+
+Same workspace in light mode — useful for daytime use or sharing with teams that prefer a lighter UI.
+
+![AthQL light theme workspace](docs/screenshots/01-workspace-catalog.png)
+
+### Results & saved queries
+
+Scrollable results preview with scan stats and cost estimate, plus saved queries organized in folders with tags.
+
+> I built AthQL for *my* productivity. Then I realized a README needs screenshots, so now I’m staging fake `generic_datastore` pipelines and `platform_datastore.PLATFORM_ORDERS` for all of you 😂 Real prod data stays locked down — but hey, I don’t mind sharing this screenshot *with* Gemini while Gemini generates the dummy data. Very meta. Very secure.
+
+![AthQL query results and saved queries panel](docs/screenshots/03-dummy-data-athql.png)
+
 ## Architecture
 
 ```
@@ -303,6 +325,8 @@ AthQL/
 ├── config/
 │   ├── athql.env.example      Template — copy to athql.env
 │   └── athql.env              Your local settings (gitignored)
+├── docs/
+│   └── screenshots/           README screenshots
 ├── backend/
 │   ├── app/
 │   │   ├── main.py            FastAPI entrypoint
