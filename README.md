@@ -2,9 +2,11 @@
 
 A local-first Amazon Athena query manager for developers. Runs on your machine using `~/.aws/credentials`, reads settings from `config/athql.env`, and stores saved queries and history in `~/.athql/metadata.db`.
 
-**Website:** [amit3200.github.io/AthQL](https://amit3200.github.io/AthQL/) · **Repo:** [github.com/Amit3200/AthQL](https://github.com/Amit3200/AthQL) · **Releases:** [v1.0.0](https://github.com/Amit3200/AthQL/releases)
+- **Website:** [amit3200.github.io/AthQL](https://amit3200.github.io/AthQL/)
+- **Repo:** [github.com/Amit3200/AthQL](https://github.com/Amit3200/AthQL)
+- **Version:** `1.0.0` — [CHANGELOG](CHANGELOG.md) · [Releases](https://github.com/Amit3200/AthQL/releases)
 
-[![Release](https://img.shields.io/github/v/release/Amit3200/AthQL?label=release)](https://github.com/Amit3200/AthQL/releases)
+[![Release](https://img.shields.io/github/v/release/Amit3200/AthQL?label=version)](https://github.com/Amit3200/AthQL/releases)
 
 ## Screenshots
 
@@ -358,7 +360,17 @@ AthQL uses [Semantic Versioning](https://semver.org/): `MAJOR.MINOR.PATCH` (e.g.
 | **Backend / OpenAPI** | Reads `VERSION` via [`backend/app/version.py`](backend/app/version.py); exposed at `GET /api/health` |
 | **Frontend** | `frontend/package.json` — kept in sync with `VERSION` |
 | **Changelog** | [`CHANGELOG.md`](CHANGELOG.md) — user-facing notes per release |
-| **GitHub Release** | Tag `v1.0.0` on the commit you ship; attach notes from the changelog |
+| **Git tag + GitHub Release** | `git tag v1.0.0` + **Releases → Publish** on GitHub (not automatic from `VERSION`) |
+
+### Three different “versions” (easy to mix up)
+
+| Layer | What it is | GitHub shows it? |
+|-------|------------|------------------|
+| **`VERSION` file** | App semver baked into code / `/api/health` | No — just a file in the repo |
+| **Git tag** (`v1.0.0`) | Immutable pointer to a commit | Yes — **Tags** count in the repo header |
+| **GitHub Release** | Tag + release notes on the Releases page | Yes — sidebar **Releases**, shields.io badge, docs site API |
+
+Adding `1.0.0` to `VERSION` and the README does **not** create a tag or release. You still need steps 2–3 below.
 
 ### Cut a release (manual)
 
@@ -372,11 +384,18 @@ git commit -m "Release v1.1.0"
 git tag -a v1.1.0 -m "v1.1.0"
 git push origin main --tags
 
-# 3. Create the GitHub Release (UI or gh CLI)
+# 3. Create the GitHub Release (required for Releases sidebar + dynamic badge)
 gh release create v1.1.0 --title "v1.1.0" --notes-file CHANGELOG.md
+# Or: GitHub → Releases → Draft new release → pick tag v1.1.0 → paste CHANGELOG section
 ```
 
-**Tag convention:** always prefix with `v` (`v1.0.0`). The docs site and README badge read from GitHub Releases API; until the first release exists, the site falls back to the `data-fallback` in `docs/index.html`.
+**Tag convention:** always prefix with `v` (`v1.0.0`). After the first GitHub Release is published, you can switch the README badge to the dynamic one:
+
+```markdown
+[![Release](https://img.shields.io/github/v/release/Amit3200/AthQL)](https://github.com/Amit3200/AthQL/releases)
+```
+
+Until then, the static `version-1.0.0` badge matches [`VERSION`](VERSION). The docs site falls back to `data-fallback="1.0.0"` in `docs/index.html` until `/releases/latest` exists.
 
 **What counts as a bump:**
 
