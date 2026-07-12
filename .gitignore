@@ -223,3 +223,6 @@ node_modules/
 .playwright-browsers/
 dist/
 frontend/dist/
+
+# Local product notes (not committed)
+ideas/

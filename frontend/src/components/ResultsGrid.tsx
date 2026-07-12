@@ -12,6 +12,8 @@ interface ResultsGridProps {
   status?: QueryStatus;
   processed: ProcessedResult | null;
   isLoading: boolean;
+  isLoadingStatus?: boolean;
+  error?: Error | null;
   executionId?: string;
   outputLocation?: string;
 }
@@ -23,7 +25,15 @@ function formatBytes(bytes?: number): string {
   return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
 }
 
-export function ResultsGrid({ status, processed, isLoading, executionId, outputLocation }: ResultsGridProps) {
+export function ResultsGrid({
+  status,
+  processed,
+  isLoading,
+  isLoadingStatus = false,
+  error,
+  executionId,
+  outputLocation,
+}: ResultsGridProps) {
   const gridRef = useRef<HTMLDivElement>(null);
   const tableWrapRef = useRef<HTMLDivElement>(null);
   const [scrollY, setScrollY] = useState(240);
@@ -133,12 +143,35 @@ export function ResultsGrid({ status, processed, isLoading, executionId, outputL
     );
   }
 
+  if (error && status?.status === "SUCCEEDED") {
+    return (
+      <Alert
+        className="athql-result-alert"
+        type="error"
+        message="Results unavailable"
+        description={error instanceof Error ? error.message : "Failed to load query results"}
+        showIcon
+      />
+    );
+  }
+
   if (status && !["SUCCEEDED"].includes(status.status)) {
     return (
       <Alert
         className="athql-result-alert"
         type="info"
         message={`Query ${status.status.toLowerCase()}…`}
+        showIcon
+      />
+    );
+  }
+
+  if (!status && executionId) {
+    return (
+      <Alert
+        className="athql-result-alert"
+        type="info"
+        message={isLoadingStatus ? "Starting query…" : "Query running…"}
         showIcon
       />
     );

@@ -4,7 +4,7 @@ A local-first Amazon Athena query manager for developers. Runs on your machine u
 
 - **Website:** [amit3200.github.io/AthQL](https://amit3200.github.io/AthQL/)
 - **Repo:** [github.com/Amit3200/AthQL](https://github.com/Amit3200/AthQL)
-- **Version:** `1.1.2` — [CHANGELOG](CHANGELOG.md) · [Releases](https://github.com/Amit3200/AthQL/releases)
+- **Version:** `1.1.3` — [CHANGELOG](CHANGELOG.md) · [Releases](https://github.com/Amit3200/AthQL/releases)
 
 [![Release](https://img.shields.io/github/v/release/Amit3200/AthQL?label=version)](https://github.com/Amit3200/AthQL/releases)
 

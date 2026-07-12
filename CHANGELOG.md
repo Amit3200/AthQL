@@ -4,6 +4,21 @@ All notable changes to AthQL are documented here. Version numbers follow [SemVer
 
 Format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.1.3] - 2026-07-13
+
+Improve SQL editor execution, repeat-run results, and Athena-aware autocomplete.
+
+### Added
+
+- **Run selected SQL** — Run or format only the highlighted block in the editor (Cmd/Ctrl+Enter / Format)
+- **Mid-query autocomplete** — Suggest columns from tables already in `FROM`/`JOIN`, including alias (`mkv.`) and `database.table` (`dataops.`) notation
+
+### Fixed
+
+- **Repeat-run results** — Clear stale query cache and refresh the results grid on every new execution
+- **Autocomplete stability** — Only the active tab drives suggestions; Tab indents instead of inserting `__v`
+- **Results panel states** — Show running/loading feedback and surface errors when preview fetch fails
+
 ## [1.1.2] - 2026-06-08
 
 Restore past query results from S3 and inspect complex row data as JSON.
@@ -79,6 +94,7 @@ First stable release — local-first Athena query manager ready for daily use.
 - Structured AWS error handling and opt-in debug logging (`ATHQL_DEBUG=1`)
 - GitHub Pages site and README documentation
 
+[1.1.3]: https://github.com/Amit3200/AthQL/releases/tag/v1.1.3
 [1.1.2]: https://github.com/Amit3200/AthQL/releases/tag/v1.1.2
 [1.1.1]: https://github.com/Amit3200/AthQL/releases/tag/v1.1.1
 [1.1.0]: https://github.com/Amit3200/AthQL/releases/tag/v1.1.0

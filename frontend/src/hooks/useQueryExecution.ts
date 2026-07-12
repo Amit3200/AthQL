@@ -2,15 +2,26 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 
 import { api } from "../api/client";
-import type { QueryStatus, QueryTab } from "../types";
+import type { QueryResult, QueryStatus, QueryTab } from "../types";
 import type { ProcessedResult } from "../workers/resultProcessor.worker";
-import ResultWorker from "../workers/resultProcessor.worker?worker";
 
 const TERMINAL = new Set(["SUCCEEDED", "FAILED", "CANCELLED"]);
 
 function estimateCost(dataScannedBytes?: number): number | undefined {
   if (dataScannedBytes == null) return undefined;
   return Math.round((dataScannedBytes / 1024 ** 3) * 0.005 * 1_000_000) / 1_000_000;
+}
+
+function processResult(data: QueryResult): ProcessedResult {
+  const dataSource = data.rows.map((row, index) => ({
+    __rowKey: index,
+    ...row,
+  }));
+  return {
+    columns: data.columns,
+    dataSource,
+    rowCount: data.row_count,
+  };
 }
 
 export interface UseQueryExecutionOptions {
@@ -29,6 +40,8 @@ export function useQueryExecution(
     queryKey: ["query-status", executionId],
     queryFn: () => api.status(executionId!),
     enabled: !!executionId && !isRestoredTerminal,
+    staleTime: 0,
+    refetchOnMount: "always",
     refetchInterval: (query) => {
       const status = query.state.data?.status;
       if (!status || TERMINAL.has(status)) return false;
@@ -51,50 +64,57 @@ export function useQueryExecution(
     return statusQuery.data;
   }, [isRestoredTerminal, restoredStatus, executionId, outputLocation, statusQuery.data]);
 
+  const resultOutputLocation = outputLocation ?? effectiveStatus?.output_location;
+
   const resultsQuery = useQuery({
-    queryKey: ["query-results", executionId, outputLocation],
+    queryKey: ["query-results", executionId, resultOutputLocation],
     queryFn: async () => {
       if (executionId) {
         try {
           return await api.results(executionId);
         } catch {
-          if (outputLocation) {
-            return await api.resultsByOutputLocation(outputLocation);
+          if (resultOutputLocation) {
+            return await api.resultsByOutputLocation(resultOutputLocation);
           }
           throw new Error("Results unavailable");
         }
       }
-      if (outputLocation) {
-        return await api.resultsByOutputLocation(outputLocation);
+      if (resultOutputLocation) {
+        return await api.resultsByOutputLocation(resultOutputLocation);
       }
       throw new Error("No results source");
     },
-    enabled: effectiveStatus?.status === "SUCCEEDED" && (!!executionId || !!outputLocation),
+    enabled: effectiveStatus?.status === "SUCCEEDED" && (!!executionId || !!resultOutputLocation),
+    staleTime: 0,
+    refetchOnMount: "always",
+    retry: 3,
+    retryDelay: (attemptIndex) => Math.min(500 * 2 ** attemptIndex, 4000),
   });
 
   const [processed, setProcessed] = useState<ProcessedResult | null>(null);
 
   useEffect(() => {
+    setProcessed(null);
+  }, [executionId]);
+
+  useEffect(() => {
     if (!resultsQuery.data) {
-      setProcessed(null);
       return;
     }
+    setProcessed(processResult(resultsQuery.data));
+  }, [resultsQuery.data, executionId]);
 
-    const worker = new ResultWorker();
-    worker.postMessage(resultsQuery.data);
-    worker.onmessage = (event: MessageEvent<ProcessedResult>) => {
-      setProcessed(event.data);
-      worker.terminate();
-    };
-
-    return () => worker.terminate();
-  }, [resultsQuery.data]);
+  const isPolling =
+    !!executionId &&
+    !isRestoredTerminal &&
+    (!statusQuery.data || !TERMINAL.has(statusQuery.data.status));
 
   return {
     status: effectiveStatus,
-    isPolling: !!executionId && !isRestoredTerminal && !TERMINAL.has(statusQuery.data?.status ?? ""),
+    isPolling,
     processed,
-    isLoadingResults: resultsQuery.isLoading,
+    isLoadingStatus: statusQuery.isLoading || statusQuery.isFetching,
+    isLoadingResults: resultsQuery.isLoading || resultsQuery.isFetching,
     error: statusQuery.error || resultsQuery.error,
   };
 }

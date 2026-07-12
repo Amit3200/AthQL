@@ -50,6 +50,7 @@ function persistDatabaseContext(database?: string, catalog?: string) {
 
 function QueryPanel({
   tab,
+  isActive,
   onUpdate,
   onSave,
   onExecuted,
@@ -58,6 +59,7 @@ function QueryPanel({
   addColumns,
 }: {
   tab: QueryTab;
+  isActive: boolean;
   onUpdate: (patch: Partial<QueryTab>) => void;
   onSave: () => void;
   onExecuted?: () => void;
@@ -68,8 +70,9 @@ function QueryPanel({
   const { message } = useNotify();
   const queryClient = useQueryClient();
   const formatRef = useRef<(() => void) | null>(null);
+  const runRef = useRef<(() => void) | null>(null);
   const { editorTheme, setEditorTheme } = useTheme();
-  const { status, isPolling, processed, isLoadingResults } = useQueryExecution(tab.executionId, {
+  const { status, isPolling, processed, isLoadingStatus, isLoadingResults, error } = useQueryExecution(tab.executionId, {
     outputLocation: tab.outputLocation,
     restoredStatus: tab.restoredStatus,
   });
@@ -126,15 +129,22 @@ function QueryPanel({
     enabled: !!activeCatalog,
   });
 
-  const runQuery = useCallback(async () => {
+  const runQuery = useCallback(async (sqlToRun?: string) => {
     if (isPolling) return;
+    const sql = (sqlToRun ?? tab.sql).trim();
+    if (!sql) return;
+
     try {
       const { execution_id } = await api.execute(
-        tab.sql,
+        sql,
         tab.database,
         tab.catalog,
         tab.updateSavedQueryId,
       );
+      if (tab.executionId) {
+        queryClient.removeQueries({ queryKey: ["query-status", tab.executionId] });
+        queryClient.removeQueries({ queryKey: ["query-results", tab.executionId] });
+      }
       onUpdate({
         executionId: execution_id,
         outputLocation: undefined,
@@ -145,7 +155,7 @@ function QueryPanel({
     } catch (err) {
       message.error(err instanceof Error ? err.message : "Execution failed");
     }
-  }, [isPolling, tab.sql, tab.database, tab.catalog, tab.updateSavedQueryId, onUpdate, onExecuted, message]);
+  }, [isPolling, tab.sql, tab.database, tab.catalog, tab.updateSavedQueryId, tab.executionId, onUpdate, onExecuted, message, queryClient]);
 
   const cancelQuery = async () => {
     if (!tab.executionId) return;
@@ -185,7 +195,7 @@ function QueryPanel({
               size="small"
               className="athql-btn-run"
               icon={<PlayCircleOutlined />}
-              onClick={runQuery}
+              onClick={() => runRef.current?.()}
               loading={isPolling}
             >
               Run
@@ -216,7 +226,7 @@ function QueryPanel({
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <Typography.Text type="secondary" className="athql-toolbar-hint" style={{ margin: 0 }}>
-            Cmd/Ctrl+Enter to run · Cmd/Ctrl+Shift+F to format
+            Cmd/Ctrl+Enter to run selection or all · Cmd/Ctrl+Shift+F to format · Ctrl+Space for suggestions
           </Typography.Text>
           <Select
             size="small"
@@ -233,8 +243,10 @@ function QueryPanel({
           onChange={(sql) => onUpdate({ sql })}
           completions={completions}
           database={tab.database}
+          isActive={isActive}
           onRun={runQuery}
           onFormatRef={formatRef}
+          onRunRef={runRef}
         />
       </div>
       <div
@@ -246,6 +258,8 @@ function QueryPanel({
           status={status}
           processed={processed}
           isLoading={isLoadingResults}
+          isLoadingStatus={isLoadingStatus}
+          error={error}
           executionId={tab.executionId}
           outputLocation={tab.outputLocation}
         />
@@ -482,6 +496,7 @@ export default function App() {
             children: (
               <QueryPanel
                 tab={tab}
+                isActive={tab.key === activeKey}
                 onUpdate={(patch) => updateTab(tab.key, patch)}
                 onSave={openSaveModal}
                 onExecuted={() => queryClient.invalidateQueries({ queryKey: ["query-history"] })}
