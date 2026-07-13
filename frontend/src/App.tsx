@@ -61,7 +61,7 @@ function QueryPanel({
   tab: QueryTab;
   isActive: boolean;
   onUpdate: (patch: Partial<QueryTab>) => void;
-  onSave: () => void;
+  onSave: (sql: string) => void;
   onExecuted?: () => void;
   completions: ReturnType<typeof useSqlCompletions>["completions"];
   addTables: ReturnType<typeof useSqlCompletions>["addTables"];
@@ -71,6 +71,7 @@ function QueryPanel({
   const queryClient = useQueryClient();
   const formatRef = useRef<(() => void) | null>(null);
   const runRef = useRef<(() => void) | null>(null);
+  const getSqlRef = useRef<(() => string) | null>(null);
   const { editorTheme, setEditorTheme } = useTheme();
   const { status, isPolling, processed, isLoadingStatus, isLoadingResults, error } = useQueryExecution(tab.executionId, {
     outputLocation: tab.outputLocation,
@@ -167,7 +168,7 @@ function QueryPanel({
     }
   };
 
-  usePrefetchCompletions(activeCatalog, tab.database, tab.sql, addTables, addColumns);
+  usePrefetchCompletions(activeCatalog, tab.database, tab.sql, isActive, addTables, addColumns);
 
   return (
     <div className="athql-panel" style={{ height: "100%", display: "flex", flexDirection: "column" }}>
@@ -210,7 +211,7 @@ function QueryPanel({
               >
                 Cancel
               </Button>
-              <Button size="small" type="text" icon={<SaveOutlined />} onClick={onSave}>
+              <Button size="small" type="text" icon={<SaveOutlined />} onClick={() => onSave(getSqlRef.current?.() ?? tab.sql)}>
                 Save
               </Button>
               <Button
@@ -247,6 +248,7 @@ function QueryPanel({
           onRun={runQuery}
           onFormatRef={formatRef}
           onRunRef={runRef}
+          onGetSqlRef={isActive ? getSqlRef : undefined}
         />
       </div>
       <div
@@ -275,6 +277,7 @@ export default function App() {
   const [tabs, setTabs] = useState<QueryTab[]>(() => [newTab(1)]);
   const [activeKey, setActiveKey] = useState(() => tabs[0].key);
   const [saveModalOpen, setSaveModalOpen] = useState(false);
+  const [saveModalSql, setSaveModalSql] = useState<string | undefined>();
   const [activeSidebarTab, setActiveSidebarTab] = useState("catalog");
   const [collapsed, setCollapsed] = useState(false);
   const nextTabNum = useRef(2);
@@ -328,8 +331,10 @@ export default function App() {
     message.success(query.restoredStatus?.status === "SUCCEEDED" ? "Query and last results loaded" : "Query loaded");
   };
 
-  const openSaveModal = () => {
+  const openSaveModal = (sql: string) => {
     if (!activeTab) return;
+    setSaveModalSql(sql);
+    updateTab(activeKey, { sql });
     setSaveModalOpen(true);
   };
 
@@ -516,7 +521,7 @@ export default function App() {
           open={saveModalOpen}
           onClose={() => setSaveModalOpen(false)}
           initialName={activeTab.name ?? activeTab.label}
-          sql={activeTab.sql}
+          sql={saveModalSql ?? activeTab.sql}
           database={activeTab.database}
           catalog={activeTab.catalog}
           updateSavedQueryId={activeTab.updateSavedQueryId}

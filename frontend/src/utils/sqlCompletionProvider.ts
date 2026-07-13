@@ -22,7 +22,7 @@ const SQL_KEYWORDS = [
 ];
 
 const MAX_SUGGESTIONS = 50;
-const MIN_PREFIX_FOR_GLOBAL_COLUMNS = 2;
+const LARGE_SQL_CHARS = 8_000;
 
 let providerRegistered = false;
 
@@ -34,9 +34,18 @@ const completionState: {
   database: undefined,
 };
 
+let sqlContextCache: {
+  versionId: number;
+  aliasMap: Map<string, string>;
+  tablesInQuery: string[];
+} | null = null;
+
 export function updateSqlCompletionState(context: SqlCompletionContext, database?: string) {
   completionState.context = context;
-  completionState.database = database;
+  if (database !== undefined) {
+    completionState.database = database;
+  }
+  sqlContextCache = null;
 }
 
 function shouldSuggestColumn(label: string, prefix: string): boolean {
@@ -57,6 +66,14 @@ function shouldSuggestColumn(label: string, prefix: string): boolean {
 function limitSuggestions<T extends { sortText?: string; label: string | { label: string } }>(
   items: T[],
 ): T[] {
+  if (items.length <= MAX_SUGGESTIONS) {
+    return items.sort((a, b) => {
+      const aSort = a.sortText ?? (typeof a.label === "string" ? a.label : a.label.label);
+      const bSort = b.sortText ?? (typeof b.label === "string" ? b.label : b.label.label);
+      return aSort.localeCompare(bSort);
+    });
+  }
+
   return items
     .sort((a, b) => {
       const aSort = a.sortText ?? (typeof a.label === "string" ? a.label : a.label.label);
@@ -66,19 +83,41 @@ function limitSuggestions<T extends { sortText?: string; label: string | { label
     .slice(0, MAX_SUGGESTIONS);
 }
 
+function getSqlContext(model: MonacoEditor.editor.ITextModel) {
+  const versionId = model.getVersionId();
+  if (sqlContextCache?.versionId === versionId) {
+    return sqlContextCache;
+  }
+
+  const sql = model.getValue();
+  const aliasMap = extractTableAliasMap(sql);
+  sqlContextCache = {
+    versionId,
+    aliasMap,
+    tablesInQuery: [...new Set(aliasMap.values())],
+  };
+  return sqlContextCache;
+}
+
 function buildKeywordSuggestions(
   monaco: Monaco,
   prefix: string,
   range: MonacoEditor.IRange,
 ) {
   const normalizedPrefix = prefix.toLowerCase();
-  return SQL_KEYWORDS.filter((kw) => kw.toLowerCase().startsWith(normalizedPrefix)).map((label) => ({
-    label,
-    kind: monaco.languages.CompletionItemKind.Keyword,
-    insertText: label,
-    range,
-    sortText: `3_${label}`,
-  }));
+  const results = [];
+  for (const label of SQL_KEYWORDS) {
+    if (!label.toLowerCase().startsWith(normalizedPrefix)) continue;
+    results.push({
+      label,
+      kind: monaco.languages.CompletionItemKind.Keyword,
+      insertText: label,
+      range,
+      sortText: `3_${label}`,
+    });
+    if (results.length >= MAX_SUGGESTIONS) break;
+  }
+  return results;
 }
 
 function buildTableSuggestions(
@@ -88,15 +127,19 @@ function buildTableSuggestions(
   range: MonacoEditor.IRange,
 ) {
   const normalizedPrefix = prefix.toLowerCase();
-  return tables
-    .filter((t) => t.toLowerCase().startsWith(normalizedPrefix))
-    .map((label) => ({
+  const results = [];
+  for (const label of tables) {
+    if (!label.toLowerCase().startsWith(normalizedPrefix)) continue;
+    results.push({
       label,
       kind: monaco.languages.CompletionItemKind.Class,
       insertText: label,
       range,
       sortText: `2_${label}`,
-    }));
+    });
+    if (results.length >= MAX_SUGGESTIONS) break;
+  }
+  return results;
 }
 
 function buildColumnSuggestions(
@@ -106,28 +149,19 @@ function buildColumnSuggestions(
   range: MonacoEditor.IRange,
   sortPrefix: string,
 ) {
-  return columns
-    .filter((col) => shouldSuggestColumn(col, prefix))
-    .map((label) => ({
+  const results = [];
+  for (const label of columns) {
+    if (!shouldSuggestColumn(label, prefix)) continue;
+    results.push({
       label,
       kind: monaco.languages.CompletionItemKind.Field,
       insertText: label,
       range,
       sortText: `${sortPrefix}_${label}`,
-    }));
-}
-
-function buildGlobalColumnSuggestions(
-  monaco: Monaco,
-  columns: string[],
-  prefix: string,
-  range: MonacoEditor.IRange,
-) {
-  if (prefix.length < MIN_PREFIX_FOR_GLOBAL_COLUMNS) {
-    return [];
+    });
+    if (results.length >= MAX_SUGGESTIONS) break;
   }
-
-  return buildColumnSuggestions(monaco, columns, prefix, range, "1");
+  return results;
 }
 
 export function ensureSqlCompletionProvider(monaco: Monaco) {
@@ -143,16 +177,20 @@ export function ensureSqlCompletionProvider(monaco: Monaco) {
     ) => {
       const ctx = completionState.context;
       const database = completionState.database;
-      const sql = model.getValue();
-      const aliasMap = extractTableAliasMap(sql);
-      const tablesInQuery = [...new Set(aliasMap.values())];
-      const scopedColumns = collectColumnsForTables(tablesInQuery, database, ctx.columnsByTable);
+      const isManual = context.triggerKind === monaco.languages.CompletionTriggerKind.Invoke;
+      const isTrigger = context.triggerKind === monaco.languages.CompletionTriggerKind.TriggerCharacter;
+      const sqlLength = model.getValueLength();
+      const isLargeSql = sqlLength > LARGE_SQL_CHARS;
+
+      if (isLargeSql && !isManual && !isTrigger) {
+        return { suggestions: [] };
+      }
 
       const lineText = model.getLineContent(position.lineNumber);
       const dotContext = parseDotContext(lineText, position.column);
-      const isManual = context.triggerKind === monaco.languages.CompletionTriggerKind.Invoke;
 
       if (dotContext) {
+        const sqlCtx = getSqlContext(model);
         const prefix = dotContext.columnPrefix;
 
         const range: MonacoEditor.IRange = {
@@ -167,7 +205,7 @@ export function ensureSqlCompletionProvider(monaco: Monaco) {
             dotContext.tableRef,
             ctx.tables,
             database,
-            aliasMap,
+            sqlCtx.aliasMap,
             ctx.columnsByTable,
           )
         ) {
@@ -193,14 +231,14 @@ export function ensureSqlCompletionProvider(monaco: Monaco) {
 
         const columnLookupRef = dotContext.tableRef.includes(".")
           ? dotContext.tableRef
-          : resolveTableRef(dotContext.tableRef, aliasMap);
+          : resolveTableRef(dotContext.tableRef, sqlCtx.aliasMap);
         const columns = resolveTableColumns(columnLookupRef, database, ctx.columnsByTable);
 
-        const suggestions = limitSuggestions(
-          buildColumnSuggestions(monaco, columns, prefix, range, "0"),
-        );
-
-        return { suggestions };
+        return {
+          suggestions: limitSuggestions(
+            buildColumnSuggestions(monaco, columns, prefix, range, "0"),
+          ),
+        };
       }
 
       const word = getSqlWordAtPosition(lineText, position.column);
@@ -216,19 +254,24 @@ export function ensureSqlCompletionProvider(monaco: Monaco) {
         return { suggestions: [] };
       }
 
+      const sqlCtx = isLargeSql ? null : getSqlContext(model);
+      const scopedColumns =
+        sqlCtx && sqlCtx.tablesInQuery.length > 0
+          ? collectColumnsForTables(sqlCtx.tablesInQuery, database, ctx.columnsByTable)
+          : [];
+
       const scopedColumnItems =
-        tablesInQuery.length > 0
+        scopedColumns.length > 0
           ? buildColumnSuggestions(monaco, scopedColumns, prefix, range, "0")
           : [];
 
       const tableItems = buildTableSuggestions(monaco, ctx.tables, prefix, range);
-      const globalColumnItems = buildGlobalColumnSuggestions(monaco, ctx.columns, prefix, range);
       const keywordItems = buildKeywordSuggestions(monaco, prefix, range);
 
       if (isManual && !prefix) {
         const manualTables = buildTableSuggestions(monaco, ctx.tables, "", range);
         const manualScoped =
-          tablesInQuery.length > 0
+          scopedColumns.length > 0
             ? buildColumnSuggestions(monaco, scopedColumns.slice(0, 30), "", range, "0")
             : [];
 
@@ -242,12 +285,7 @@ export function ensureSqlCompletionProvider(monaco: Monaco) {
       }
 
       return {
-        suggestions: limitSuggestions([
-          ...scopedColumnItems,
-          ...tableItems,
-          ...globalColumnItems,
-          ...keywordItems,
-        ]),
+        suggestions: limitSuggestions([...scopedColumnItems, ...tableItems, ...keywordItems]),
       };
     },
   });

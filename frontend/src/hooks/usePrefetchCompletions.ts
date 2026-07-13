@@ -3,20 +3,29 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
 import { extractTablesFromSql } from "../utils/sqlContext";
 
+const PREFETCH_DEBOUNCE_MS = 900;
+const LARGE_SQL_CHARS = 8_000;
+
+function hashSql(sql: string): string {
+  return `${sql.length}:${sql.slice(0, 64)}:${sql.slice(-64)}`;
+}
+
 export function usePrefetchCompletions(
   catalog: string | undefined,
   database: string | undefined,
   sql: string,
+  enabled: boolean,
   addTables: (database: string, tables: string[]) => void,
   addColumns: (database: string, table: string, columns: string[]) => void,
 ) {
   const loadedTablesRef = useRef<string | null>(null);
   const loadedColumnsRef = useRef(new Set<string>());
   const knownTablesRef = useRef(new Set<string>());
+  const lastSqlHashRef = useRef<string>("");
   const [knownTableCount, setKnownTableCount] = useState(0);
 
   useEffect(() => {
-    if (!catalog || !database) return;
+    if (!enabled || !catalog || !database) return;
 
     let cancelled = false;
     const cacheKey = `${catalog}:${database}`;
@@ -39,19 +48,24 @@ export function usePrefetchCompletions(
     return () => {
       cancelled = true;
     };
-  }, [catalog, database, addTables]);
+  }, [enabled, catalog, database, addTables]);
 
   useEffect(() => {
-    if (!catalog || !database) return;
+    if (!enabled || !catalog || !database) return;
     if (knownTablesRef.current.size === 0) return;
+    if (sql.length > LARGE_SQL_CHARS) return;
 
-    const tables = extractTablesFromSql(sql).filter((table) =>
-      knownTablesRef.current.has(table.toLowerCase()),
-    );
-    if (tables.length === 0) return;
+    const sqlHash = hashSql(sql);
+    if (sqlHash === lastSqlHashRef.current) return;
 
     let cancelled = false;
     const timer = window.setTimeout(() => {
+      lastSqlHashRef.current = sqlHash;
+      const tables = extractTablesFromSql(sql).filter((table) =>
+        knownTablesRef.current.has(table.toLowerCase()),
+      );
+      if (tables.length === 0) return;
+
       void (async () => {
         for (const table of tables) {
           const key = `${catalog}:${database}:${table}`;
@@ -67,16 +81,15 @@ export function usePrefetchCompletions(
               columns.map((c) => c.name),
             );
           } catch {
-            // Invalid or missing table; don't retry on every keystroke.
             loadedColumnsRef.current.add(key);
           }
         }
       })();
-    }, 400);
+    }, PREFETCH_DEBOUNCE_MS);
 
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [catalog, database, sql, addColumns, knownTableCount]);
+  }, [enabled, catalog, database, sql, addColumns, knownTableCount]);
 }

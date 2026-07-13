@@ -1,21 +1,29 @@
 import { useCallback, useRef, useState } from "react";
 
 import type { SqlCompletionContext } from "../types";
+import { updateSqlCompletionState } from "../utils/sqlCompletionProvider";
 
 const EMPTY: SqlCompletionContext = { tables: [], columns: [], columnsByTable: {} };
+const BUMP_DEBOUNCE_MS = 300;
 
 export function useSqlCompletions() {
   const tablesRef = useRef(new Set<string>());
-  const columnsRef = useRef(new Set<string>());
   const columnsByTableRef = useRef<Record<string, string[]>>({});
   const [snapshot, setSnapshot] = useState<SqlCompletionContext>(EMPTY);
+  const bumpTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const bump = useCallback(() => {
-    setSnapshot({
-      tables: Array.from(tablesRef.current).sort(),
-      columns: Array.from(columnsRef.current).sort(),
-      columnsByTable: { ...columnsByTableRef.current },
-    });
+    if (bumpTimerRef.current) clearTimeout(bumpTimerRef.current);
+    bumpTimerRef.current = setTimeout(() => {
+      bumpTimerRef.current = null;
+      const next: SqlCompletionContext = {
+        tables: Array.from(tablesRef.current).sort(),
+        columns: [],
+        columnsByTable: { ...columnsByTableRef.current },
+      };
+      setSnapshot(next);
+      updateSqlCompletionState(next);
+    }, BUMP_DEBOUNCE_MS);
   }, []);
 
   const addTables = useCallback(
@@ -49,13 +57,6 @@ export function useSqlCompletions() {
       };
 
       for (const name of names) {
-        for (const candidate of [name, `${table}.${name}`, `${database}.${table}.${name}`]) {
-          if (!columnsRef.current.has(candidate)) {
-            columnsRef.current.add(candidate);
-            changed = true;
-          }
-        }
-
         registerKey(table, name);
         registerKey(table.toLowerCase(), name);
         registerKey(`${database}.${table}`, name);
@@ -68,4 +69,4 @@ export function useSqlCompletions() {
   );
 
   return { completions: snapshot, addTables, addColumns };
-};
+}

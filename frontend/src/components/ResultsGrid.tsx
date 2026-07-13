@@ -1,7 +1,7 @@
 import { DownloadOutlined } from "@ant-design/icons";
 import { Alert, Button, Empty, Table, Tooltip, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { api } from "../api/client";
 import { RowJsonModal } from "./RowJsonModal";
@@ -25,7 +25,7 @@ function formatBytes(bytes?: number): string {
   return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
 }
 
-export function ResultsGrid({
+function ResultsGridInner({
   status,
   processed,
   isLoading,
@@ -52,20 +52,30 @@ export function ResultsGrid({
         body && body.scrollWidth > body.clientWidth
           ? body.offsetHeight - body.clientHeight
           : 0;
-      // scroll.y is body-only; header + optional x-scrollbar sit outside that height
       const next = Math.floor(wrap.clientHeight - headerHeight - horizontalScrollbar - 1);
-      setScrollY(Math.max(80, next));
+      setScrollY((prev) => {
+        const clamped = Math.max(80, next);
+        return prev === clamped ? prev : clamped;
+      });
     };
 
-    updateScrollHeight();
-    const raf = requestAnimationFrame(updateScrollHeight);
+    let rafId = 0;
+    const scheduleUpdate = () => {
+      if (rafId) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = 0;
+        updateScrollHeight();
+      });
+    };
 
-    const observer = new ResizeObserver(updateScrollHeight);
+    scheduleUpdate();
+
+    const observer = new ResizeObserver(scheduleUpdate);
     observer.observe(wrap);
     observer.observe(grid);
 
     return () => {
-      cancelAnimationFrame(raf);
+      if (rafId) cancelAnimationFrame(rafId);
       observer.disconnect();
     };
   }, [status?.status, processed?.dataSource.length, isLoading, processed?.columns.length]);
@@ -231,3 +241,5 @@ export function ResultsGrid({
     </div>
   );
 }
+
+export const ResultsGrid = memo(ResultsGridInner);

@@ -4,6 +4,17 @@ All notable changes to AthQL are documented here. Version numbers follow [SemVer
 
 Format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.1.4] - 2026-07-13
+
+Keep the SQL editor responsive on large queries and heavy result sets.
+
+### Fixed
+
+- **Editor performance** — Debounce React sync while typing so Monaco no longer re-renders the full SQL on every keystroke (fixes cursor jumping)
+- **Large query mode** — Auto-disable word wrap, folding, and typing suggestions on big SQL; use Ctrl+Space and `table.` instead
+- **Autocomplete cost** — Cache SQL context, skip global column scans, and avoid parsing huge queries on each suggestion
+- **UI jank** — Prefetch metadata only on the active tab; memoize editor/results and throttle grid resize work
+
 ## [1.1.3] - 2026-07-13
 
 Improve SQL editor execution, repeat-run results, and Athena-aware autocomplete.
@@ -94,6 +105,7 @@ First stable release — local-first Athena query manager ready for daily use.
 - Structured AWS error handling and opt-in debug logging (`ATHQL_DEBUG=1`)
 - GitHub Pages site and README documentation
 
+[1.1.4]: https://github.com/Amit3200/AthQL/releases/tag/v1.1.4
 [1.1.3]: https://github.com/Amit3200/AthQL/releases/tag/v1.1.3
 [1.1.2]: https://github.com/Amit3200/AthQL/releases/tag/v1.1.2
 [1.1.1]: https://github.com/Amit3200/AthQL/releases/tag/v1.1.1
