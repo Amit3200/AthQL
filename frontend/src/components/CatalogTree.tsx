@@ -22,6 +22,7 @@ export function CatalogTree({ onInsertText, onContextChange, onTablesLoaded, onC
   const profileQuery = useQuery({
     queryKey: ["profile"],
     queryFn: api.profile,
+    retry: 1,
   });
 
   const catalogsQuery = useQuery({
@@ -124,9 +125,11 @@ export function CatalogTree({ onInsertText, onContextChange, onTablesLoaded, onC
       ))}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          {profileQuery.data
-            ? `${profileQuery.data.profile} · ${profileQuery.data.region}`
-            : "Loading profile…"}
+          {profileQuery.isError
+            ? "AWS profile unavailable (is the API running on :8000?)"
+            : profileQuery.data
+              ? `${profileQuery.data.profile} · ${profileQuery.data.region}`
+              : "Loading profile…"}
         </Typography.Text>
         <Button size="small" icon={<ReloadOutlined />} onClick={refresh} />
       </div>

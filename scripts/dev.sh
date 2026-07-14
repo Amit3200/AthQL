@@ -24,6 +24,15 @@ fi
 
 trap 'kill 0' EXIT
 
+if stale_pids="$(lsof -ti :8000 2>/dev/null || true)"; then
+  if [ -n "$stale_pids" ]; then
+    echo "WARNING: port 8000 is already in use (PID: $stale_pids)."
+    echo "The API backend cannot start, so the UI will stay on 'Loading profile…'."
+    echo "Free the port, then re-run dev.sh:"
+    echo "  kill -9 $stale_pids"
+  fi
+fi
+
 DEV_PORT="${ATHQL_DEV_PORT:-5173}"
 echo "AthQL UI: http://localhost:${DEV_PORT}"
 if [ -n "${ATHQL_DEV_HOST:-}" ]; then
